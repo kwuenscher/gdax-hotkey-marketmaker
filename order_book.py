@@ -17,8 +17,6 @@ import requests
 
 from public_client import Gdax
 
-
-
 class Book(object):
 
     def __init__(self, product_id = ''):

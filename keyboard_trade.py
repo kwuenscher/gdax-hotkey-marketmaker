@@ -31,26 +31,8 @@ from controller import gameController
 from authentification_client import AuthenticatedClient
 from websocket_client import WebsocketClient
 import config
-
-
 import logging
 from logging.handlers import RotatingFileHandler
-
-file_handler = RotatingFileHandler('trading_log.csv', 'a', 10 * 1024 * 1024, 100)
-file_handler.setFormatter(logging.Formatter('%(asctime)s, %(levelname)s, %(message)s'))
-file_handler.setLevel(logging.INFO)
-
-trading_file_logger = logging.getLogger('trading_file_log')
-trading_file_logger.addHandler(file_handler)
-trading_file_logger.setLevel(logging.INFO)
-
-
-
-ARGS = argparse.ArgumentParser(description='Coinbase Exchange bot.')
-ARGS.add_argument('--c', action='store_true', dest='command_line', default=False, help='Command line output')
-ARGS.add_argument('--t', action='store_true', dest='trading', default=False, help='Trade')
-
-args = ARGS.parse_args()
 
 master_switch = False
 
@@ -125,29 +107,6 @@ def websocket_to_order_book():
         if not order_book.process_message(message):
             print(pformat(message))
             return False
-
-
-        if args.trading:
-
-            if 'order_id' in message and message['order_id'] == open_orders.open_ask_order_id:
-                if message['type'] == 'done':
-                    open_orders.open_ask_order_id = None
-                    open_orders.open_ask_price = None
-                    open_orders.open_ask_status = None
-                    open_orders.open_ask_rejections = Decimal('0.0')
-                    open_orders.open_ask_cancelled = False
-                else:
-                    open_orders.open_ask_status = message['type']
-
-            elif 'order_id' in message and message['order_id'] == open_orders.open_bid_order_id:
-                if message['type'] == 'done':
-                    open_orders.open_bid_order_id = None
-                    open_orders.open_bid_price = None
-                    open_orders.open_bid_status = None
-                    open_orders.open_bid_rejections = Decimal('0.0')
-                    open_orders.open_bid_cancelled = False
-                else:
-                    open_orders.open_bid_status = message['type']
 
 
 def update_orders():
