@@ -5,17 +5,18 @@ import requests
 import base64
 import json
 from requests.auth import AuthBase
-from public_client import Gdax
+from gdax.public_client import PublicClient
+from gdax.gdax_auth import GdaxAuth
 
 
-class AuthenticatedClient(Gdax):
-
-    def __init__(self, key, b64secret, passphrase, api_url="https://api.gdax.com", product_id="BTC-USD"):
-        super(self.__class__, self).__init__(api_url, product_id)
+class AuthenticatedClient(PublicClient):
+    def __init__(self, key, b64secret, passphrase, api_url="https://api.gdax.com", timeout=30):
+        super(AuthenticatedClient, self).__init__(api_url)
         self.auth = GdaxAuth(key, b64secret, passphrase)
+        self.timeout = timeout
 
     def get_account(self, account_id):
-        r = requests.get(self.url + '/accounts/' + account_id, auth=self.auth)
+        r = requests.get(self.url + '/accounts/' + account_id, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -24,7 +25,7 @@ class AuthenticatedClient(Gdax):
 
     def get_account_history(self, account_id):
         result = []
-        r = requests.get(self.url + '/accounts/{}/ledger'.format(account_id), auth=self.auth)
+        r = requests.get(self.url + '/accounts/{}/ledger'.format(account_id), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         result.append(r.json())
         if "cb-after" in r.headers:
@@ -32,7 +33,7 @@ class AuthenticatedClient(Gdax):
         return result
 
     def history_pagination(self, account_id, result, after):
-        r = requests.get(self.url + '/accounts/{}/ledger?after={}'.format(account_id, str(after)), auth=self.auth)
+        r = requests.get(self.url + '/accounts/{}/ledger?after={}'.format(account_id, str(after)), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         if r.json():
             result.append(r.json())
@@ -42,7 +43,7 @@ class AuthenticatedClient(Gdax):
 
     def get_account_holds(self, account_id):
         result = []
-        r = requests.get(self.url + '/accounts/{}/holds'.format(account_id), auth=self.auth)
+        r = requests.get(self.url + '/accounts/{}/holds'.format(account_id), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         result.append(r.json())
         if "cb-after" in r.headers:
@@ -50,7 +51,7 @@ class AuthenticatedClient(Gdax):
         return result
 
     def holds_pagination(self, account_id, result, after):
-        r = requests.get(self.url + '/accounts/{}/holds?after={}'.format(account_id, str(after)), auth=self.auth)
+        r = requests.get(self.url + '/accounts/{}/holds?after={}'.format(account_id, str(after)), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         if r.json():
             result.append(r.json())
@@ -64,51 +65,67 @@ class AuthenticatedClient(Gdax):
             kwargs["product_id"] = self.product_id
         r = requests.post(self.url + '/orders',
                           data=json.dumps(kwargs),
-                          auth=self.auth)
+                          auth=self.auth,
+                          timeout=self.timeout)
         return r.json()
 
     def sell(self, **kwargs):
         kwargs["side"] = "sell"
         r = requests.post(self.url + '/orders',
                           data=json.dumps(kwargs),
-                          auth=self.auth)
+                          auth=self.auth,
+                          timeout=self.timeout)
         return r.json()
 
     def cancel_order(self, order_id):
-        r = requests.delete(self.url + '/orders/' + order_id, auth=self.auth)
+        r = requests.delete(self.url + '/orders/' + order_id, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
-    def cancel_all(self, data=None, product=''):
-        if type(data) is dict:
-            if "product" in data:
-                product = data["product"]
-        r = requests.delete(self.url + '/orders/',
-                            data=json.dumps({'product_id': product or self.product_id}), auth=self.auth)
+    def cancel_all(self, product_id=''):
+        url = self.url + '/orders/'
+        if product_id:
+            url += "?product_id={}&".format(str(product_id))
+        r = requests.delete(url, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
     def get_order(self, order_id):
-        r = requests.get(self.url + '/orders/' + order_id, auth=self.auth)
+        r = requests.get(self.url + '/orders/' + order_id, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
-    def get_orders(self):
+    def get_orders(self, product_id='', status=[]):
         result = []
-        r = requests.get(self.url + '/orders/', auth=self.auth)
+        url = self.url + '/orders/'
+        params = {}
+        if product_id:
+            params["product_id"] = product_id
+        if status:
+            params["status"] = status
+        r = requests.get(url, auth=self.auth, params=params, timeout=self.timeout)
         # r.raise_for_status()
         result.append(r.json())
         if 'cb-after' in r.headers:
-            self.paginate_orders(result, r.headers['cb-after'])
+            self.paginate_orders(product_id, status, result, r.headers['cb-after'])
         return result
 
-    def paginate_orders(self, result, after):
-        r = requests.get(self.url + '/orders?after={}'.format(str(after)))
+    def paginate_orders(self, product_id, status, result, after):
+        url = self.url + '/orders'
+
+        params = {
+            "after": str(after),
+        }
+        if product_id:
+            params["product_id"] = product_id
+        if status:
+            params["status"] = status
+        r = requests.get(url, auth=self.auth, params=params, timeout=self.timeout)
         # r.raise_for_status()
         if r.json():
             result.append(r.json())
         if 'cb-after' in r.headers:
-            self.paginate_orders(result, r.headers['cb-after'])
+            self.paginate_orders(product_id, status, result, r.headers['cb-after'])
         return result
 
     def get_fills(self, order_id='', product_id='', before='', after='', limit=''):
@@ -117,14 +134,14 @@ class AuthenticatedClient(Gdax):
         if order_id:
             url += "order_id={}&".format(str(order_id))
         if product_id:
-            url += "product_id={}&".format(product_id or self.product_id)
+            url += "product_id={}&".format(product_id)
         if before:
             url += "before={}&".format(str(before))
         if after:
             url += "after={}&".format(str(after))
         if limit:
             url += "limit={}&".format(str(limit))
-        r = requests.get(url, auth=self.auth)
+        r = requests.get(url, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         result.append(r.json())
         if 'cb-after' in r.headers and limit is not len(r.json()):
@@ -136,8 +153,8 @@ class AuthenticatedClient(Gdax):
         if order_id:
             url += "order_id={}&".format(str(order_id))
         if product_id:
-            url += "product_id={}&".format(product_id or self.product_id)
-        r = requests.get(url, auth=self.auth)
+            url += "product_id={}&".format(product_id)
+        r = requests.get(url, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         if r.json():
             result.append(r.json())
@@ -153,7 +170,7 @@ class AuthenticatedClient(Gdax):
             url += "status={}&".format(str(status))
         if after:
             url += 'after={}&'.format(str(after))
-        r = requests.get(url, auth=self.auth)
+        r = requests.get(url, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         result.append(r.json())
         if 'cb-after' in r.headers:
@@ -165,7 +182,7 @@ class AuthenticatedClient(Gdax):
             "amount": amount,
             "currency": currency  # example: USD
         }
-        r = requests.post(self.url + "/funding/repay", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/funding/repay", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -176,12 +193,12 @@ class AuthenticatedClient(Gdax):
             "currency": currency,  # example: USD
             "amount": amount
         }
-        r = requests.post(self.url + "/profiles/margin-transfer", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/profiles/margin-transfer", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
     def get_position(self):
-        r = requests.get(self.url + "/position", auth=self.auth)
+        r = requests.get(self.url + "/position", auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -189,7 +206,7 @@ class AuthenticatedClient(Gdax):
         payload = {
             "repay_only": repay_only or False
         }
-        r = requests.post(self.url + "/position/close", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/position/close", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -199,7 +216,7 @@ class AuthenticatedClient(Gdax):
             "currency": currency,
             "payment_method_id": payment_method_id
         }
-        r = requests.post(self.url + "/deposits/payment-method", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/deposits/payment-method", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -209,7 +226,7 @@ class AuthenticatedClient(Gdax):
             "currency": currency,
             "coinbase_account_id": coinbase_account_id
         }
-        r = requests.post(self.url + "/deposits/coinbase-account", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/deposits/coinbase-account", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -219,7 +236,7 @@ class AuthenticatedClient(Gdax):
             "currency": currency,
             "payment_method_id": payment_method_id
         }
-        r = requests.post(self.url + "/withdrawals/payment-method", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/withdrawals/payment-method", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -229,7 +246,7 @@ class AuthenticatedClient(Gdax):
             "currency": currency,
             "coinbase_account_id": coinbase_account_id
         }
-        r = requests.post(self.url + "/withdrawals/coinbase", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/withdrawals/coinbase", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -239,17 +256,17 @@ class AuthenticatedClient(Gdax):
             "currency": currency,
             "crypto_address": crypto_address
         }
-        r = requests.post(self.url + "/withdrawals/crypto", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/withdrawals/crypto", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
     def get_payment_methods(self):
-        r = requests.get(self.url + "/payment-methods", auth=self.auth)
+        r = requests.get(self.url + "/payment-methods", auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
     def get_coinbase_accounts(self):
-        r = requests.get(self.url + "/coinbase-accounts", auth=self.auth)
+        r = requests.get(self.url + "/coinbase-accounts", auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
@@ -264,40 +281,16 @@ class AuthenticatedClient(Gdax):
             "format": report_format,
             "email": email
         }
-        r = requests.post(self.url + "/reports", data=json.dumps(payload), auth=self.auth)
+        r = requests.post(self.url + "/reports", data=json.dumps(payload), auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
     def get_report(self, report_id=""):
-        r = requests.get(self.url + "/reports/" + report_id, auth=self.auth)
+        r = requests.get(self.url + "/reports/" + report_id, auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
 
     def get_trailing_volume(self):
-        r = requests.get(self.url + "/users/self/trailing-volume", auth=self.auth)
+        r = requests.get(self.url + "/users/self/trailing-volume", auth=self.auth, timeout=self.timeout)
         # r.raise_for_status()
         return r.json()
-
-
-class GdaxAuth(AuthBase):
-    # Provided by GDAX: https://docs.gdax.com/#signing-a-message
-    def __init__(self, api_key, secret_key, passphrase):
-        self.api_key = api_key
-        self.secret_key = secret_key
-        self.passphrase = passphrase
-
-    def __call__(self, request):
-        timestamp = str(time.time())
-        message = timestamp + request.method + request.path_url + (request.body or '')
-        message = message.encode('ascii')
-        hmac_key = base64.b64decode(self.secret_key)
-        signature = hmac.new(hmac_key, message, hashlib.sha256)
-        signature_b64 = base64.b64encode(signature.digest())
-        request.headers.update({
-            'Content-Type': 'Application/JSON',
-            'CB-ACCESS-SIGN': signature_b64,
-            'CB-ACCESS-TIMESTAMP': timestamp,
-            'CB-ACCESS-KEY': self.api_key,
-            'CB-ACCESS-PASSPHRASE': self.passphrase
-        })
-        return request

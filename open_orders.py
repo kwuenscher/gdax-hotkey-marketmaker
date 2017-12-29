@@ -9,9 +9,7 @@ class OpenOrders(object):
     def __init__(self, auth_client):
 
         self.accounts = {}
-
         self.auth_client = auth_client
-
         self.open_bid_order_id = None
         self.open_bid_price = None
         self.open_bid_status = None
@@ -41,19 +39,10 @@ class OpenOrders(object):
 
         response = self.auth_client.cancel_order(order_id)
 
-        #if response.status_code == 200:
-        #    file_logger.info('canceled {0} {1} @ {2}'.format(side, order_id, price))
-        #elif 'message' in response and response['message'] == 'order not found':
-        #    file_logger.info('{0} already canceled: {1} @ {2}'.format(side, order_id, price))
-        #elif 'message' in response and response['message'] == 'Order already done':
-        #    file_logger.info('{0} already filled: {1} @ {2}'.format(side, order_id, price))
-        #else:
-        #    file_logger.error('Unhandled response: {0}'.format((pformat(response))))
-
     def get_open_orders(self):
 
         open_orders = self.auth_client.get_orders()
-
+        print(open_orders)
         print('Number of open orders: {}'.format(len(open_orders[0])))
 
         try:

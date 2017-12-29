@@ -34,7 +34,7 @@ import config
 import logging
 from logging.handlers import RotatingFileHandler
 
-master_switch = False
+master_switch = True
 
 if master_switch == True:
     print('Danger Zone!')
@@ -49,20 +49,12 @@ else:
     conf_pass = config.passphrase
 
 product_id = 'ETH-EUR'
-
 order_book = Book(product_id = product_id)
-
-auth_client = AuthenticatedClient(conf_key, conf_b64 , conf_pass, api_url = network, product_id=product_id)
-
+auth_client = AuthenticatedClient(conf_key, conf_pass, conf_b64, api_url = network)
 open_orders = OpenOrders(auth_client)
-# Make sure that the accounts are initialised.
-#open_orders.get_balances()
-
-#open_orders.cancel_all()
 
 spreads = Spreads()
 bets = Bets()
-
 
 @asyncio.coroutine
 def websocket_to_order_book():
@@ -137,11 +129,8 @@ def monitor():
 if __name__ == '__main__':
 
     loop = asyncio.get_event_loop()
-
     loop.run_in_executor(None, functools.partial(gameController, open_orders, order_book, spreads, bets, auth_client, product_id))
-    #loop.run_in_executor(None, update_balances)
-    loop.run_in_executor(None, update_orders)
-    #loop.run_in_executor(None, update_pl)
+    loop.run_in_executor(None, update_balances)
 
     n = 0
 
